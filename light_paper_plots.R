@@ -8,12 +8,15 @@ library(colorBlindness)
 library(viridis)
 # prism themes
 library(ggprism)
+# dark
+library(ggdark)
 
 # themes https://ggplot2-book.org/polishing.html
 dir.create(file.path(dot_dir, 'plots'))
 
 small_text_size <- 10
 med_text_size <- 12
+darkmode <- F
 
 # custom palettes http://www.sthda.com/english/wiki/ggplot2-colors-how-to-change-colors-automatically-and-manually
 time_palette <- viridis::viridis(7, direction = -1)
@@ -30,9 +33,9 @@ purple_pal <- c('#0E0A48', '#201A78', '#3C33BD', '#463CDA', '#6D63CE', '#9289E9'
 # view
 colorBlindness::displayAllColors(time_palette)
 
-outline_color <- 'black'
 
-dpi <- 300
+
+
 
 # palette gradients https://ab604.github.io/docs/colour-palette-tutorial-10-11-2018.html#creating-a-set-of-gradients-from-a-custom-palette
 #time_gradients <- scale_color_gradient(low = time_palette[i], high = white)
@@ -42,12 +45,24 @@ shapes <- c(22, 21)
 shapes_solid <- c(15, 16)
 # line types to use... wt, jawD
 linetypes <- c(1, 3)
+dpi <- 300
+outline_color <- 'black'
+if (darkmode) {
+  outline_color <- 'azure3'
+}
 
 save_light_graph <- function(plt_name, plt, dims = c()) {
+  if (darkmode) {
+    plt_name <- paste0(plt_name, '_dark')
+    plt <- plt + dark_theme_classic()
+    print('in dark mode')
+  }
+  if (!darkmode) {
+    plt <- plt + theme_classic() + theme(panel.grid.major = element_line(linetype = "dotted"))
+  }
+
   plt <- plt +
-    theme_classic() +
-    theme(panel.grid.major = element_line(linetype = "dotted"),
-          aspect.ratio = 1,
+    theme(aspect.ratio = 1,
           axis.title.x = element_blank(),
           axis.title.y = element_blank(),
           legend.title = element_blank(),
@@ -60,6 +75,7 @@ save_light_graph <- function(plt_name, plt, dims = c()) {
     # specific legend hide https://stackoverflow.com/questions/35618260/remove-legend-ggplot-2-2
     guides(color="none")
   # 
+
   if (is_empty(dims)) {
     ggsave(file.path(dot_dir, 'plots', paste0(plt_name, '.png')), device = 'png', height = 3,
            width = 3, units = 'in', dpi = dpi, plot = plt)

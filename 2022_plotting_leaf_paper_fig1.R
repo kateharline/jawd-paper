@@ -26,10 +26,14 @@ summary$sum_fill <- as.character(summary$time)
 # make factors
 summary$cond <- factor(summary$cond, levels = c('wt', 'jawD'))
 
+# log linear
+summary$log_area <- log(summary$leaf_area)
+summary$log_l <- log(summary$max_l)
 # which values variables
 ys <- colnames(summary)[4:8]
 
 plot_small_scatter_helper(summary, time_palette, shapes, ys, add_p = F)
+plot_small_scatter_helper(summary, time_palette, shapes, c('leaf_area', 'max_l'), add_p = F, is_log=T, identifier='_as_log')
 
 # if doing p values
 # summary_sm <- summary[summary$time < '9',]
@@ -148,6 +152,8 @@ rel_leaves <- rel_leaves %>% mutate(rel_area = if_else(b_whole_area > value_mm.w
                                                                  b_whole_length/value_mm.whole_length, value_mm.whole_length/b_whole_length))
 
 small_box_helper(rel_leaves, c('rel_area', 'rel_length'), T)
+# means for manu text
+rel_leaves_summary <- rel_leaves %>% group_by(cond) %>% summarise(avg_a = mean(rel_area))
 
 #### calculate cv
 cv <- function(dat) {

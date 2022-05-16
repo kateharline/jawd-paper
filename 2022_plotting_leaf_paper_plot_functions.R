@@ -17,6 +17,8 @@ library(purrr)
 library(tidyr)
 # for stats 
 library(rstatix)
+# for ppretty jitter on violins
+library(ggbeeswarm)
 
 
 # figure 1
@@ -36,7 +38,7 @@ p_val_df <- function(df, grouper, y, x) {
   return(p_df)
 }
 
-plot_small_scatter <- function(summary, time_palette, shapes, x, y, add_p = F, add_lm=F, identifier='') {
+plot_small_scatter <- function(summary, time_palette, shapes, x, y, add_p = F, add_lm=F, identifier='', is_log=F) {
   # must group for proper dodge
   plt <- summary %>% group_by(cond) %>% 
     ggplot(aes_string(x = x, y = y))
@@ -61,19 +63,25 @@ plot_small_scatter <- function(summary, time_palette, shapes, x, y, add_p = F, a
     df_p <- p_val_df(summary, x, y, 'cond')
     plt <- plt +
       add_pvalue(df_p,
+                 color = outline_color,
                      xmin = 'xmin',
                      xmax = 'xmax',
                      label = '{p.adj}',
                      tip.length = 0) 
+  }
+  if (is_log) {
+    plt <- plt + scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                                 labels = trans_format("log10", math_format(10^.x))) +
+      annotation_logticks(sides = 'l') 
   }
   
   save_light_graph(paste0(y, identifier), plt)
 }
 
 # iteration help https://stackoverflow.com/questions/4856849/looping-over-variables-in-ggplot
-plot_small_scatter_helper <- function(summary, time_palette, shapes, ys, add_p = F) {
+plot_small_scatter_helper <- function(summary, time_palette, shapes, ys, add_p = F, is_log=F, identifier='') {
   for (i in 1:length(ys)) {
-    plot_small_scatter(summary, time_palette, shapes, 'time', ys[i], add_p)
+    plot_small_scatter(summary, time_palette, shapes, 'time', ys[i], add_p, is_log=is_log, identifier = identifier)
   }
 }
 
@@ -94,21 +102,27 @@ small_box <- function(d, measure, add_p = F) {
     mutate(outlier.high = !!sym(measure) > quantile(!!sym(measure), .75) + 1.5*IQR(!!sym(measure)),
            outlier.low = !!sym(measure) < quantile(!!sym(measure), .25) - 1.5*IQR(!!sym(measure))) %>% ungroup()
   # hacky hide outliers
-  d$for_alpha <- if_else(d['outlier.high'] | d['outlier.low'], .7, 0)
+  #d$for_alpha <- if_else(d['outlier.high'] | d['outlier.low'], .7, 0)\
+  # decide to show all points 
+  d$for_alpha <- 0.7
 
   plt <- d %>%
     ggplot(aes_string(y = measure, x = 'cond')) +
     scale_shape_manual(values = shapes) +
     scale_linetype_manual(values = linetypes) +
     scale_alpha_manual(values = c(0.7, 0.3)) +
-    geom_violin(fill = outline_color, aes_string(linetype = 'cond', alpha = 'cond')) +
-    geom_point(position = position_jitterdodge(), size = 3, alpha = d$for_alpha,
-               color = outline_color, fill = outline_color, aes_string(shape = 'cond'))
+    geom_violin(fill = outline_color, aes_string(linetype = 'cond', alpha = 'cond'), color = outline_color) +
+    # geom_point(position = position_jitterdodge(), size = 3, alpha = d$for_alpha,
+    #            color = outline_color, fill = outline_color, aes_string(shape = 'cond'))
+    # for showing all points https://apreshill.github.io/data-vis-labs-2018/04-distributions.html
+    geom_quasirandom(size = 3, alpha = d$for_alpha, color = outline_color, 
+                     fill = outline_color, aes_string(shape = 'cond'))
   if (add_p) {
     # calculate p 
     df_p <- p_val_df_2(d, 'cond', measure)
     plt <- plt +
       add_pvalue(df_p,
+                 color = outline_color,
                  xmin = 'xmin',
                  xmax = 'xmax',
                  label = '{p.adj.signif}',
@@ -274,11 +288,11 @@ custom_pal <- function(low_col, high_col, num) {
   return(scales::seq_gradient_pal(low_col, high_col, "Lab")(seq(0,1,length.out=num)))
 }
 
-plot_dens <- function(d, x, y, pale, linetype, bin_num, is_log, y_lims, shape, identifier = '') {
+plot_dens <- function(d, x, y, pale, linetype, bin_num, is_log, y_lims, shape, identifier = '', adjust = 1) {
   # https://ggplot2.tidyverse.org/reference/geom_density_2d.html
   plt2 <- d %>% ggplot(aes_string(x = x, y = y)) +
     geom_point(color = outline_color, shape = shape) +
-    geom_density_2d_filled(colour = outline_color, bins = bin_num, linetype = linetype, alpha = 0.8) +
+    geom_density_2d_filled(colour = outline_color, bins = bin_num, adjust=adjust, linetype = linetype, alpha = 0.8) +
     scale_fill_manual(values = pale) +
     scale_linetype_manual(values = c(linetype))
   if (!all(is.na(y_lims))) {
@@ -294,7 +308,7 @@ plot_dens <- function(d, x, y, pale, linetype, bin_num, is_log, y_lims, shape, i
 }
 
 plot_dens_helper <- function(d, conds, axes, measures, lo_colors, time_palette, linetypes, bin_num = 7, ylims = matrix(),
-                             identifier='', is_log=F, is_curv=F, shapes=shapes_solid) {
+                             identifier='', is_log=F, is_curv=F, shapes=shapes_solid, adjust = 1) {
   times <- unique(d$time)
   if (all(is.na(ylims)) & !is_curv) {
     ylims <- get_y_lims(d, measures)
@@ -308,10 +322,13 @@ plot_dens_helper <- function(d, conds, axes, measures, lo_colors, time_palette, 
           ylims <- rbind(unname(quantile(d[d$time == times[t],c(measures[m])], probs = c(.075, .925))))
         }
         pal <- custom_pal('white', time_palette[t], bin_num)
+        if (darkmode) {
+          pal <- custom_pal('black', time_palette[t], bin_num)
+        }
         for(a in 1:length(axes)) {
           plot_dens(df[df$time == times[t],], axes[a], measures[m], pal,
                     linetypes[c], bin_num, is_log, ylims[m,], shapes[c],
-                    identifier = paste0(identifier, '_', measures[m], '_', axes[a], '_', conds[c], '_', times[t], '_DAS'))
+                    identifier = paste0(identifier, '_', measures[m], '_', axes[a], '_', conds[c], '_', times[t], '_DAS'), adjust = adjust)
         
         }
       }
@@ -434,6 +451,7 @@ clonal_box <- function(d, x, y, color_t, linetypes, shapes, identifier='', add_p
     df_p <- p_val_df(d, x, y, 'cond')
     plt <- plt +
       add_pvalue(df_p,
+                 color = outline_color,
                  xmin = 'xmin',
                  xmax = 'xmax',
                  label = '{p.adj.signif}',
