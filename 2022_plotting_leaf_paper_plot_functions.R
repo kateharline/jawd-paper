@@ -42,11 +42,7 @@ plot_small_scatter <- function(summary, time_palette, shapes, x, y, add_p = F, a
   # must group for proper dodge
   plt <- summary %>% group_by(cond) %>% 
     ggplot(aes_string(x = x, y = y))
-  if (add_lm) {
-    # http://www.sthda.com/english/wiki/ggplot2-scatter-plots-quick-start-guide-r-software-and-data-visualization
-    plt <- plt + geom_smooth(color = outline_color, method = 'lm', aes(alpha = cond))
-    identifier <- 'lm'
-  }
+
   plt <- plt + 
     geom_point(position = position_jitterdodge(), size = 5, color = outline_color, stroke = 1,
                aes_string(shape = 'cond', alpha = 'cond', fill = 'sum_fill')) +
@@ -74,22 +70,29 @@ plot_small_scatter <- function(summary, time_palette, shapes, x, y, add_p = F, a
                                  labels = trans_format("log10", math_format(10^.x))) +
       annotation_logticks(sides = 'l') 
   }
+  if (add_lm) {
+    # http://www.sthda.com/english/wiki/ggplot2-scatter-plots-quick-start-guide-r-software-and-data-visualization
+    plt <- plt + geom_smooth(color = outline_color, method = lm)
+  }
   
   save_light_graph(paste0(y, identifier), plt)
 }
 
 # iteration help https://stackoverflow.com/questions/4856849/looping-over-variables-in-ggplot
-plot_small_scatter_helper <- function(summary, time_palette, shapes, ys, add_p = F, is_log=F, identifier='') {
+plot_small_scatter_helper <- function(summary, time_palette, shapes, ys, add_p = F, is_log=F, identifier='', add_lm=F) {
   for (i in 1:length(ys)) {
-    plot_small_scatter(summary, time_palette, shapes, 'time', ys[i], add_p, is_log=is_log, identifier = identifier)
+    plot_small_scatter(summary, time_palette, shapes, 'time', ys[i], add_p, is_log=is_log, identifier = identifier, add_lm = add_lm)
   }
 }
 
 p_val_df_2 <- function(df, x, y) {
   df_p <- df %>%  
-    rstatix::t_test(reformulate(x, y)) %>%
-    rstatix::adjust_pvalue(p.col = "p", method = "bonferroni") %>%
-    rstatix::add_significance(p.col = "p.adj") %>% 
+    rstatix::wilcox_test(reformulate(x, y)) 
+  # https://www.sheffield.ac.uk/polopoly_fs/1.885207!/file/99_Mann_Whitney_U_Test.pdf
+  # https://cran.r-project.org/web/packages/rstatix/rstatix.pdf
+  # https://www.statisticshowto.com/probability-and-statistics/statistics-definitions/kruskal-wallis/
+  df_p <- df_p %>%
+    rstatix::add_significance(p.col = "p") %>% 
     rstatix::add_xy_position(x = x, dodge = 0.8) # important for positioning!
 
   return(df_p)
@@ -125,7 +128,7 @@ small_box <- function(d, measure, add_p = F) {
                  color = outline_color,
                  xmin = 'xmin',
                  xmax = 'xmax',
-                 label = '{p.adj.signif}',
+                 label = '{p.signif}',
                  tip.length = 0.01) 
   }
 
@@ -240,10 +243,13 @@ plot_bin_box_helper <- function(d, axis_closes, axis_fars, cuts, axes, measures,
 
 # scatter/linear plots of measures v location axes
 # changed to lose facets
-plot_scatter <- function(d, x, y, t_color, c_shape, c_linetype, ylims, identifier = ''){
+plot_scatter <- function(d, x, y, t_color=outline_color, c_shape=shapes[1], c_linetype=linetypes[1], ylims = matrix(), identifier = ''){
   plt <- d %>% ggplot(aes_string(x = x, y = y)) +
-    geom_point(alpha = 0.4, color = outline_color, fill = t_color, shape = c_shape, linetype = c_linetype) + 
-    ylim(ylims)
+    geom_point(alpha = 0.4, color = outline_color, fill = t_color, shape = c_shape, linetype = c_linetype)
+  if (!all(is.na(ylims))) {
+    plt <- plt+ ylim(ylims)
+  }
+
     # line of fit https://bookdown.org/dli/rguide/scatterplots-and-best-fit-lines-two-sets.html
     # geom_smooth(method = 'lm', color = outline_color, fill = outline_color, alpha = 0.6) +
   save_light_graph(identifier, plt)
@@ -257,10 +263,10 @@ get_y_lims <- function(d, measures) {
   return(ylims)
 }
 
-plot_scatter_helper <- function(d, axes, measures, time_palette, shapes, linetypes, identifier = '', ylims = c()){
+plot_scatter_helper <- function(d, axes, measures, time_palette, shapes, linetypes, identifier = '', ylims = matrix()){
   times <- unique(d$time)
   conds <- levels(d$cond)
-  if (is_empty(ylims)) {
+  if (!all(is.na(y_lims))) {
     ylims <- get_y_lims(d, measures)
   }
   
@@ -288,7 +294,7 @@ custom_pal <- function(low_col, high_col, num) {
   return(scales::seq_gradient_pal(low_col, high_col, "Lab")(seq(0,1,length.out=num)))
 }
 
-plot_dens <- function(d, x, y, pale, linetype, bin_num, is_log, y_lims, shape, identifier = '', adjust = 1) {
+plot_dens <- function(d, x, y, pale, linetype=linetypes[1], bin_num=7, is_log=F, y_lims = matrix(), shape=shapes[1], identifier = '', adjust = 1) {
   # https://ggplot2.tidyverse.org/reference/geom_density_2d.html
   plt2 <- d %>% ggplot(aes_string(x = x, y = y)) +
     geom_point(color = outline_color, shape = shape) +

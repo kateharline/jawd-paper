@@ -34,7 +34,8 @@ ys <- colnames(summary)[4:8]
 
 plot_small_scatter_helper(summary, time_palette, shapes, ys, add_p = F)
 plot_small_scatter_helper(summary, time_palette, shapes, c('leaf_area', 'max_l'), add_p = F, is_log=T, identifier='_as_log')
-
+summary$time <- as.numeric(as.character(summary$time))
+plot_small_scatter_helper(summary, time_palette, shapes, c('log_area', 'log_l'), add_p = F, add_lm=T)
 # if doing p values
 # summary_sm <- summary[summary$time < '9',]
 # plot_small_scatter_helper(summary_sm, time_palette, shapes, 'cell_dens', add_p = T)
@@ -153,7 +154,8 @@ rel_leaves <- rel_leaves %>% mutate(rel_area = if_else(b_whole_area > value_mm.w
 
 small_box_helper(rel_leaves, c('rel_area', 'rel_length'), T)
 # means for manu text
-rel_leaves_summary <- rel_leaves %>% group_by(cond) %>% summarise(avg_a = mean(rel_area))
+rel_leaves_summary <- rel_leaves %>% group_by(cond) %>% summarise(avg_a = mean(rel_area),
+                                                                  med_a = median(rel_area))
 
 #### calculate cv
 cv <- function(dat) {
@@ -166,3 +168,8 @@ cv_jawD <- cv(rel_leaves[rel_leaves$cond == 'jawD',]$rel_area)
 # https://cran.r-project.org/web/packages/cvequality/vignettes/how_to_test_CVs.html
 library(cvequality)
 with(rel_leaves, asymptotic_test(rel_area, cond))
+
+# ripples quant
+ripples <- read.csv('/Users/kateharline/workspace/finals/wt_jawd_big_data_ripples.csv')
+ripples$cond <- factor(ripples$cond, levels = c('wt', 'jawD'))
+small_box_helper(ripples, c('ripples'), add_p = T)

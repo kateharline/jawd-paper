@@ -14,7 +14,6 @@ dot_dir <- "/Users/kateharline/workspace/finals"
 big_d <- data.frame()
 
 for (k in 1:length(base_dirs)){
-  # not if old or reg... determines which curvature radius
   setwd(file.path(dot_dir, base_dirs[k], "attributes"))
   
   # make list of files in dir
